@@ -11,6 +11,8 @@ import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 import numpy as np
 import cv2
+from scipy import ndimage
+
 
 CUDA_VANISHING_POINT_DETECTOR_FILENAME = 'vanishing_point_detector.cu'
 
@@ -146,6 +148,7 @@ def get_vanishing_point_callback(color_image_msg,
                             VP_HORIZON_CANDIDATES_MARGIN -
                             int(GABOR_FILTER_KERNEL_SIZE / 2):, :]
 
+    
     cuda_context.push()
     original_rows, original_cols = grey_image.shape
     energies_rows = original_rows - GABOR_FILTER_KERNEL_SIZE + 1
@@ -169,7 +172,8 @@ def get_vanishing_point_callback(color_image_msg,
                                        energies_cols)
     cuda.memcpy_htod(  # TEMP
         vp_candidates_gpu,
-        np.zeros((2 * VP_HORIZON_CANDIDATES_MARGIN + 1, energies_cols), dtype=np.float32))
+        np.zeros((2 * VP_HORIZON_CANDIDATES_MARGIN + 1,
+		 energies_cols), dtype=np.float32))
     voteForVanishingPointCandidates(
         combined_energies_gpu, combined_phases_gpu, vp_candidates_gpu,
         np.int32(energies_rows), np.int32(2 * VP_HORIZON_CANDIDATES_MARGIN + 1),
@@ -177,9 +181,21 @@ def get_vanishing_point_callback(color_image_msg,
         block=(CUDA_BLOCK_SIZE, CUDA_BLOCK_SIZE, 1),
         grid=(int(np.ceil(energies_cols / CUDA_BLOCK_SIZE)),
               int(np.ceil(energies_rows / CUDA_BLOCK_SIZE))))
+    
+    vp_candidates = np.empty((2*VP_HORIZON_CANDIDATES_MARGIN +1
+				,energies_cols), dtype = np.float32)
+    cuda.memcpy_dtoh(vp_candidates, vp_candidates_gpu)
+
+    vp_candidates = cv2.GaussianBlur(vp_candidates,  (15, 15), 0)
+    
+    #vp = np.where(vp_candidates == vp_candidates.max())
+    vp = ndimage.measurements.center_of_mass(vp_candidates)
+    vp_row = int(vdisp_line.b)#vp[0][0]+vdisp_line.b
+    vp_col = vp[1]#vp[1][0]
+   	
 
     vanishing_point_pub.publish(  # TODO: Publish real VP
-        VanishingPoint(header=color_image_msg.header, row=0, col=0))
+        VanishingPoint(header=color_image_msg.header, row=vp_row, col=vp_col))
 
     if gabor_filter_kernels_pubs is not None:
         for theta_idx in range(THETA_N):
@@ -252,7 +268,7 @@ if __name__ == '__main__':
     # Vanishing Point Detection Parameters
     CUDA_BLOCK_SIZE = rospy.get_param('~cuda_block_size', 16)
     VP_HORIZON_CANDIDATES_MARGIN = rospy.get_param(
-        '~vp_horizon_candidates_margin', 20)
+        '~vp_horizon_candidates_margin', 50)
     THETA_N = 4  # Implementation Specific
     GABOR_FILTER_THETAS = [
         np.pi / THETA_N * theta_idx for theta_idx in range(THETA_N)]

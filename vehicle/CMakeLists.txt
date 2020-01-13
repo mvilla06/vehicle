@@ -77,6 +77,7 @@ add_message_files(
 generate_messages(
   DEPENDENCIES
   std_msgs
+
 )
 
 ################################################
@@ -126,6 +127,9 @@ include_directories(
 
 add_executable(sensors_sim src/sensors_sim.cpp)
 target_link_libraries(sensors_sim ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
+
+add_executable(arrow_drawer src/arrows.cpp)
+target_link_libraries(arrow_drawer ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
 
 
 #############
