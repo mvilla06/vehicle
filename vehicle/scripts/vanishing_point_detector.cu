@@ -128,7 +128,7 @@ __global__ void combineGaborEnergies(float* gabor_energies, int rows, int cols,
     descending_energies_arg[i] = max_idx;
     temp_energies[max_idx] = -1.0f;
   }
-//consider only relevant voters, where the confidence is over a 0.35 threshold, approximating an ideal response to a sine function
+//consider only relevant voters, where the confidence is over a 0.35 threshold
 
 if((1 - ((gabor_energies[THETA_N * offset + descending_energies_arg[1]] +
 	gabor_energies[THETA_N * offset + descending_energies_arg[2]] +
@@ -221,7 +221,7 @@ __global__ void voteForVanishingPointCandidates(float* combined_energies, float*
   if (image_y >= voters_rows || image_x >= cols)
     return;  // Out of image.
   int energies_offset = image_y * cols + image_x;
-  int candidates_y_offset = candidates_rows * cols;
+  int candidates_y_offset = image_y*(cols+1);// candidates_rows * cols;
   float energy = combined_energies[energies_offset];
   if (energy < 0.85)
     return;  // Filter Noise
@@ -233,7 +233,7 @@ __global__ void voteForVanishingPointCandidates(float* combined_energies, float*
     int y_delta = image_y + candidates_rows - candidates_y;
     int candidates_x = image_x + cot * y_delta;
     if (candidates_x >= 0 && candidates_x < cols)
-      atomicAdd(&candidates[candidates_y_offset + candidates_x], 1);//energy);
+      atomicAdd(&candidates[candidates_y_offset + candidates_x], 1*abs(sinf(phase*2)));//energy);
   }
 }
 }

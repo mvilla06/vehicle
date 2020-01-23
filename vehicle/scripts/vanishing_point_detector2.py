@@ -12,6 +12,7 @@ from pycuda.compiler import SourceModule
 import numpy as np
 import cv2
 from scipy import ndimage
+import matplotlib.pyplot as plt
 
 
 CUDA_VANISHING_POINT_DETECTOR_FILENAME = 'vanishing_point_detector.cu'
@@ -144,12 +145,14 @@ def get_vanishing_point_callback(color_image_msg,
     color_image = cv_bridge.imgmsg_to_cv2(
         color_image_msg, desired_encoding='passthrough')
     grey_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
-    grey_image = grey_image[int(np.round(vdisp_line.b)) - 
-				VP_HORIZON_CANDIDATES_MARGIN/2 - 
-				int(GABOR_FILTER_KERNEL_SIZE / 2):, :]
+    grey_image = grey_image[int(np.round(vdisp_line.b)) 
+			#	+ VP_HORIZON_CANDIDATES_MARGIN/2 
+				- int(GABOR_FILTER_KERNEL_SIZE / 2):, :]
 
     cuda_context.push()
+
     original_rows, original_cols = grey_image.shape
+    
     energies_rows = original_rows - GABOR_FILTER_KERNEL_SIZE + 1
     energies_cols = original_cols - GABOR_FILTER_KERNEL_SIZE + 1
 
@@ -171,37 +174,53 @@ def get_vanishing_point_callback(color_image_msg,
                                        energies_cols)
     cuda.memcpy_htod(  # TEMP
         vp_candidates_gpu,
-        np.zeros((2 * VP_HORIZON_CANDIDATES_MARGIN + 1
-, energies_cols), dtype=np.float32))
+        np.zeros((2 * VP_HORIZON_CANDIDATES_MARGIN + 1 , energies_cols), dtype=np.float32))
+
+
     voteForVanishingPointCandidates(
         combined_energies_gpu, combined_phases_gpu, vp_candidates_gpu,
-        np.int32(energies_rows), np.int32(2 * VP_HORIZON_CANDIDATES_MARGIN + 1),
-        np.int32(energies_cols),
+        np.int32(energies_rows), np.int32(2 * VP_HORIZON_CANDIDATES_MARGIN + 1), np.int32(energies_cols),
         block=(CUDA_BLOCK_SIZE, CUDA_BLOCK_SIZE, 1),
         grid=(int(np.ceil(energies_cols / CUDA_BLOCK_SIZE)),
               int(np.ceil(energies_rows / CUDA_BLOCK_SIZE))))
+
+
     vp_candidates = np.empty((2*VP_HORIZON_CANDIDATES_MARGIN +1
 				,energies_cols), dtype = np.float32)
     cuda.memcpy_dtoh(vp_candidates, vp_candidates_gpu)
 
-    #vp_candidates = cv2.GaussianBlur(vp_candidates,  (15, 15), 0)
+    vp_candidates = cv2.GaussianBlur(vp_candidates,  (15, 15), 0)
+    vp_candidates -= vp_candidates.min()
+    vp_candidates /= vp_candidates.max()
+    vp_candidates *=255
     
-    #vp = np.where(vp_candidates == vp_candidates.max())
-    #vp = ndimage.measurements.center_of_mass(vp_candidates)
+
+    """
+	#center of mass
     m = cv2.moments(vp_candidates)
     if m["m00"]==0:
 	m["m00"] = 1;
 	m["m10"] = original_cols>>1
-    #rospy.loginfo(m)
-    vp_candidates -= vp_candidates.min()
-    vp_candidates /= vp_candidates.max()
-    vp_candidates *=255
-    #cv2.imshow("im", grey_image)
-    #cv2.waitKey(3)
-    vp_row = int(vdisp_line.b)#vp[0][0]+vdisp_line.b
-    vp_col = int(m["m10"]/m["m00"])#int(vp[1])#vp[1][0]
     
+    
+   
 
+
+   
+    
+    vp_com = int(m["m10"]/m["m00"])
+    """
+    #max
+    vp = np.where(vp_candidates == np.amax(vp_candidates));
+    
+    
+    vp_col = vp[1][0];
+
+    #if (abs(vp_col-vp_com)>100):
+	#vp_col = vp_com;
+    
+    vp_row = int(vdisp_line.b)
+   
     vanishing_point_pub.publish(  # TODO: Publish real VP
         VanishingPoint(header=color_image_msg.header, row=vp_row, col=vp_col))
 
@@ -239,20 +258,25 @@ def get_vanishing_point_callback(color_image_msg,
         combined_energies = np.empty((energies_rows, energies_cols),
                                      dtype=np.float32)
         cuda.memcpy_dtoh(combined_energies, combined_energies_gpu)
+	
+	combined_energies = np.nan_to_num(combined_energies);
+	combined_energies[combined_energies==np.NINF] = 0;
+	combined_energies[combined_energies==np.inf] = 0;
         combined_energies -= combined_energies.min()
-        combined_energies /= combined_energies.max()
+	if combined_energies.max()==0:
+        	combined_energies /= combined_energies.max()
         combined_energies *= 255
 	
-	mask = (np.pad(combined_energies, ((12,12), (12, 12)), mode='constant', constant_values= ((1, 1), (1, 1)) )>0).astype(np.uint8)
-	mask *=255
 	
-	gray_image = cv2.bitwise_and(grey_image, grey_image, mask=mask)
+	#mask = (np.pad(combined_energies, ((12,12), (12, 12)), mode='constant', constant_values= ((1, 1), (1, 1)) )>0).astype(np.uint8)
+	#mask *=255
 	
-	#cv2.imshow("im", gray_image)
-	#cv2.waitKey(3)
-        #gabor_combined_energies_pub.publish(cv_bridge.cv2_to_imgmsg(
-            #combined_energies.astype(np.uint8), encoding='8UC1'))
-	gabor_combined_energies_pub.publish(cv_bridge.cv2_to_imgmsg(gray_image, encoding='8UC1'))
+	#gray_image = cv2.bitwise_and(grey_image, grey_image, mask=mask)
+	
+	
+        gabor_combined_energies_pub.publish(cv_bridge.cv2_to_imgmsg(
+            combined_energies.astype(np.uint8), encoding='8UC1'))
+	#gabor_combined_energies_pub.publish(cv_bridge.cv2_to_imgmsg(gray_image, encoding='8UC1'))
 
     if vp_candidates_region_pub is not None:
         vp_candidates_region = np.empty(
@@ -290,6 +314,8 @@ def get_vanishing_point_callback(color_image_msg,
 
 
 if __name__ == '__main__':
+    vpGraph=[];
+    plt.ion();
     rospy.init_node('vanishing_point_detector', anonymous=False)
 
     # The following publications are for debugging and visualization only as
@@ -310,7 +336,7 @@ if __name__ == '__main__':
     # Vanishing Point Detection Parameters
     CUDA_BLOCK_SIZE = rospy.get_param('~cuda_block_size', 16)
     VP_HORIZON_CANDIDATES_MARGIN = rospy.get_param(
-        '~vp_horizon_candidates_margin', 60)
+        '~vp_horizon_candidates_margin', 110)
     THETA_N = 4  # Implementation Specific
     GABOR_FILTER_THETAS = [
         np.pi / THETA_N * theta_idx for theta_idx in range(THETA_N)]
