@@ -7,22 +7,43 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <cv_bridge/cv_bridge.h>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <string>
+#include <ros/console.h>
 
 
 void callback(const sensor_msgs::ImageConstPtr& image, const vehicle::VanishingPoint::ConstPtr& vp, const ros::Publisher *pub)
 {
+	
 	cv_bridge::CvImagePtr cv_ptr;
 	cv_ptr = cv_bridge::toCvCopy(image);
 	int x = vp->col;
 	int y = vp->row;
+	std::string line;
+	
+	printf("Hola");
+	static std::ifstream input("/home/mauricio/Vehiculo/track.txt");
+	
+	if(getline(input, line)){
+		
+		std::istringstream ss(line);
+		int track;
+		ss>>track;
+		cv::circle(cv_ptr->image, cv::Point(track, y),10, CV_RGB(0,255, 0), 3, 8, 0);
+	}
 	cv::arrowedLine(cv_ptr->image, cv::Point(512, 544), cv::Point(x, y), CV_RGB(255, 0, 0), 10, 8, 0.1);
 	pub->publish(cv_ptr->toImageMsg());
 
 }
 int main(int argc, char** argv)
 {
+	
+	
 	ros::init(argc, argv, "arrow_drawer");
 	ros::NodeHandle nh;
+	
 	message_filters::Subscriber<sensor_msgs::Image> image_sub (nh, "/multisense/left/image_rect_color", 1);
 	message_filters::Subscriber<vehicle::VanishingPoint> vp_sub(nh, "/vanishing_point_detector/vanishing_point", 1);
 	ros::Publisher arrow_pub = nh.advertise<sensor_msgs::Image>("arrow_drawer/vp_arrow", 1);
