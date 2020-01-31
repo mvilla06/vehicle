@@ -72,6 +72,7 @@ def apply_gabor_kernels(grey_image, gabor_kernels_gpu):
        number of rows and columns in the Gabor Energies Tensor is
        (image_rows - (kernel_size >> 1)) X (image_cols - (kernel_size >> 1)) due
        to the padding lost at convolution."""
+    
     original_rows, original_cols = grey_image.shape
     energies_rows = original_rows - GABOR_FILTER_KERNEL_SIZE + 1
     energies_cols = original_cols - GABOR_FILTER_KERNEL_SIZE + 1
@@ -145,12 +146,14 @@ def get_vanishing_point_callback(color_image_msg,
     color_image = cv_bridge.imgmsg_to_cv2(
         color_image_msg, desired_encoding='passthrough')
     grey_image = cv2.cvtColor(color_image, cv2.COLOR_BGR2GRAY)
+    #grey_image2 = cv2.resize(grey_image,  (int(grey_image.shape[1]*0.66), int(grey_image.shape[0]*0.66)))
+    
     grey_image = grey_image[int(np.round(vdisp_line.b)) 
 			#	+ VP_HORIZON_CANDIDATES_MARGIN/2 
 				- int(GABOR_FILTER_KERNEL_SIZE / 2):, :]
 
     cuda_context.push()
-
+    
     original_rows, original_cols = grey_image.shape
     
     energies_rows = original_rows - GABOR_FILTER_KERNEL_SIZE + 1
@@ -195,7 +198,7 @@ def get_vanishing_point_callback(color_image_msg,
     vp_candidates *=255
     
 
-    """
+    
 	#center of mass
     m = cv2.moments(vp_candidates)
     if m["m00"]==0:
@@ -209,20 +212,21 @@ def get_vanishing_point_callback(color_image_msg,
    
     
     vp_com = int(m["m10"]/m["m00"])
+    
     """
     #max
     vp = np.where(vp_candidates == np.amax(vp_candidates));
     
     
     vp_col = vp[1][0];
-
+    
     #if (abs(vp_col-vp_com)>100):
 	#vp_col = vp_com;
-    
+    """
     vp_row = int(vdisp_line.b)
-   
+    
     vanishing_point_pub.publish(  # TODO: Publish real VP
-        VanishingPoint(header=color_image_msg.header, row=vp_row, col=vp_col))
+        VanishingPoint(header=color_image_msg.header, row=vp_row, col=vp_com))
 
     
 
@@ -289,6 +293,7 @@ def get_vanishing_point_callback(color_image_msg,
         vp_candidates_region -= vp_candidates_region.min()
         vp_candidates_region /= vp_candidates_region.max()
         vp_candidates_region *= 255
+	#vp_candidates_region = 255-vp_candidates_region
         #color_vp_candidates_region = cv2.cvtColor(
         #    vp_candidates_region.astype(np.uint8), cv2.COLOR_GRAY2RGB)
         #color_vp_candidates_region[max_idx[0] - 5:max_idx[0] + 5,
@@ -309,8 +314,8 @@ def get_vanishing_point_callback(color_image_msg,
         #                thickness=3)
 	
         vp_candidates_region_pub.publish(cv_bridge.cv2_to_imgmsg(
-            #color_image, encoding='bgr8'))
-		vp_candidates_region.astype(np.uint8), encoding = '8UC1'))
+            #grey_image2, encoding='8UC1'))
+		    vp_candidates_region.astype(np.uint8), encoding = '8UC1'))
 
 
 if __name__ == '__main__':
@@ -336,7 +341,7 @@ if __name__ == '__main__':
     # Vanishing Point Detection Parameters
     CUDA_BLOCK_SIZE = rospy.get_param('~cuda_block_size', 16)
     VP_HORIZON_CANDIDATES_MARGIN = rospy.get_param(
-        '~vp_horizon_candidates_margin', 110)
+        '~vp_horizon_candidates_margin', 160)
     THETA_N = 4  # Implementation Specific
     GABOR_FILTER_THETAS = [
         np.pi / THETA_N * theta_idx for theta_idx in range(THETA_N)]

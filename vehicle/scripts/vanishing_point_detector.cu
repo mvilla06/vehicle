@@ -1,7 +1,7 @@
 #define THETA_N 4
 #define SQRT_2 1.4142135623730951f
 #define PI 3.141592653589793f
-
+#define THRESHOLD 200
 extern "C" {
 /**
  * Clears out the Gabor Energies Tensor, setting all of its values to zero.
@@ -128,21 +128,21 @@ __global__ void combineGaborEnergies(float* gabor_energies, int rows, int cols,
     descending_energies_arg[i] = max_idx;
     temp_energies[max_idx] = -1.0f;
   }
-//consider only relevant voters, where the confidence is over a 0.35 threshold
+//consider only relevant voters, where the confidence is over a 0.7 threshold
 
 if((1 - ((gabor_energies[THETA_N * offset + descending_energies_arg[1]] +
 	gabor_energies[THETA_N * offset + descending_energies_arg[2]] +
 	gabor_energies[THETA_N * offset + descending_energies_arg[3]] )/
-	(3*gabor_energies[THETA_N * offset + descending_energies_arg[0]])))<0.7){
+	(3*gabor_energies[THETA_N * offset + descending_energies_arg[0]])))<0.70){
 		combined_energies[offset] =0;
 		combined_phases[offset]= PI/2;
 		return; //confidence is below threshold, there is not a well defined orientation 
 	}
 
-  float s1 = (gabor_energies[THETA_N * offset + descending_energies_arg[0]] );//-
-  //            gabor_energies[THETA_N * offset + descending_energies_arg[3]]);
+  float s1 = (gabor_energies[THETA_N * offset + descending_energies_arg[0]]);// -
+              //gabor_energies[THETA_N * offset + descending_energies_arg[3]]);
   float s2 = (gabor_energies[THETA_N * offset + descending_energies_arg[1]]);// -
-   //           gabor_energies[THETA_N * offset + descending_energies_arg[2]]);
+              //gabor_energies[THETA_N * offset + descending_energies_arg[2]]);
   int theta_idx1 = descending_energies_arg[0];
   int theta_idx2 = descending_energies_arg[1];
   float combined_y = 0.0f, combined_x = 0.0f;
@@ -221,19 +221,25 @@ __global__ void voteForVanishingPointCandidates(float* combined_energies, float*
   if (image_y >= voters_rows || image_x >= cols)
     return;  // Out of image.
   int energies_offset = image_y * cols + image_x;
-  int candidates_y_offset = image_y*(cols+1);// candidates_rows * cols;
+  int candidates_y_offset = (image_y+100)*(cols+1);// candidates_rows * cols;
   float energy = combined_energies[energies_offset];
   if (energy < 0.85)
     return;  // Filter Noise
+
   float phase = combined_phases[energies_offset];
   float cot = 1.0f / tanf(phase);
-  for (int candidates_y = candidates_rows - 1; candidates_y >= 0; candidates_y--)
+  for (int candidates_y = candidates_rows  - 100; 
+		candidates_y >=  0; 
+		candidates_y--)
   {
-    candidates_y_offset -= cols;
-    int y_delta = image_y + candidates_rows - candidates_y;
+    
+    int y_delta = image_y  - candidates_y + candidates_rows;
+	
     int candidates_x = image_x + cot * y_delta;
-    if (candidates_x >= 0 && candidates_x < cols)
-      atomicAdd(&candidates[candidates_y_offset + candidates_x], 1*abs(sinf(phase*2)));//energy);
+    if (candidates_x >= 0 && candidates_x < cols )
+      atomicAdd(&candidates[candidates_y_offset + candidates_x], (abs(sinf(phase*2)*abs(sinf(phase*2)))));
+    candidates_y_offset -= cols;
   }
+
 }
 }
