@@ -179,7 +179,7 @@ def get_vanishing_point_callback(color_image_msg,
         vp_candidates_gpu,
         np.zeros((2 * VP_HORIZON_CANDIDATES_MARGIN + 1 , energies_cols), dtype=np.float32))
 
-
+    
     voteForVanishingPointCandidates(
         combined_energies_gpu, combined_phases_gpu, vp_candidates_gpu,
         np.int32(energies_rows), np.int32(2 * VP_HORIZON_CANDIDATES_MARGIN + 1), np.int32(energies_cols),
@@ -187,9 +187,14 @@ def get_vanishing_point_callback(color_image_msg,
         grid=(int(np.ceil(energies_cols / CUDA_BLOCK_SIZE)),
               int(np.ceil(energies_rows / CUDA_BLOCK_SIZE))))
 
-
+    
     vp_candidates = np.empty((2*VP_HORIZON_CANDIDATES_MARGIN +1
 				,energies_cols), dtype = np.float32)
+
+    if(vp_candidates_gpu is not None):
+        rospy.loginfo(vp_candidates_gpu)
+    else:
+        rospy.loginfo("NULL")
     cuda.memcpy_dtoh(vp_candidates, vp_candidates_gpu)
 
     vp_candidates = cv2.GaussianBlur(vp_candidates,  (15, 15), 0)
@@ -198,7 +203,7 @@ def get_vanishing_point_callback(color_image_msg,
     vp_candidates *=255
     
 
-    
+    """
 	#center of mass
     m = cv2.moments(vp_candidates)
     if m["m00"]==0:
@@ -222,11 +227,11 @@ def get_vanishing_point_callback(color_image_msg,
     
     #if (abs(vp_col-vp_com)>100):
 	#vp_col = vp_com;
-    """
+    
     vp_row = int(vdisp_line.b)
     
     vanishing_point_pub.publish(  # TODO: Publish real VP
-        VanishingPoint(header=color_image_msg.header, row=vp_row, col=vp_com))
+        VanishingPoint(header=color_image_msg.header, row=vp_row, col=vp_col))
 
     
 

@@ -22,10 +22,10 @@ void callback(const sensor_msgs::ImageConstPtr& image, const vehicle::VanishingP
 	int x = vp->col;
 	int y = vp->row;
 	std::string line;
+	static int i = 0;
 	
-	printf("Hola");
 	static std::ifstream input("/home/mauricio/Vehiculo/track.txt");
-	
+	if(i>20)
 	if(getline(input, line)){
 		
 		std::istringstream ss(line);
@@ -33,6 +33,7 @@ void callback(const sensor_msgs::ImageConstPtr& image, const vehicle::VanishingP
 		ss>>track;
 		cv::circle(cv_ptr->image, cv::Point(track, y),10, CV_RGB(0,255, 0), 3, 8, 0);
 	}
+	i++;
 	cv::arrowedLine(cv_ptr->image, cv::Point(512, 544), cv::Point(x, y), CV_RGB(255, 0, 0), 10, 8, 0.1);
 	pub->publish(cv_ptr->toImageMsg());
 
