@@ -1,7 +1,7 @@
 #define THETA_N 4
 #define SQRT_2 1.4142135623730951f
 #define PI 3.141592653589793f
-#define THRESHOLD 200
+
 extern "C" {
 /**
  * Clears out the Gabor Energies Tensor, setting all of its values to zero.
@@ -66,6 +66,7 @@ __global__ void addGaborFilterMagnitudeResponse(float* gabor_energies, int theta
   }
   int tensor_offset = ((image_y - image_padding) * (cols - (image_padding << 1)) + (image_x - image_padding)) * THETA_N;
   gabor_energies[tensor_offset + theta_idx] = sqrtf(real_response * real_response + imag_response * imag_response);
+  
 }
 
 /**
@@ -137,7 +138,8 @@ if((1 - ((gabor_energies[THETA_N * offset + descending_energies_arg[1]] +
 		combined_energies[offset] =0;
 		combined_phases[offset]= PI/2;
 		return; //confidence is below threshold, there is not a well defined orientation 
-	}
+  }
+  
 
   float s1 = (gabor_energies[THETA_N * offset + descending_energies_arg[0]] -
               gabor_energies[THETA_N * offset + descending_energies_arg[3]]);
@@ -199,6 +201,7 @@ if((1 - ((gabor_energies[THETA_N * offset + descending_energies_arg[1]] +
   }
   combined_energies[offset] = sqrtf(combined_y * combined_y + combined_x * combined_x);
   combined_phases[offset] = atan2f(combined_y, combined_x);
+  //printf("%f\n", combined_energies[offset]);
 }
 
 /**
@@ -223,9 +226,9 @@ __global__ void voteForVanishingPointCandidates(float* combined_energies, float*
   int energies_offset = image_y * cols + image_x;
   int candidates_y_offset = (image_y)*(cols+1);// candidates_rows * cols;
   float energy = combined_energies[energies_offset];
-  if (energy < 0.85)
-    return;  // Filter Noise
-
+  /*if (energy < 0.85)
+    return;  // Filter Noise*/
+  
   float phase = combined_phases[energies_offset];
   float cot = 1.0f / tanf(phase);
   for (int candidates_y = candidates_rows-1 ; 
@@ -237,9 +240,10 @@ __global__ void voteForVanishingPointCandidates(float* combined_energies, float*
     
     int candidates_x = image_x + cot * y_delta;
     if (candidates_x >= 0 && candidates_x < cols )
-      atomicAdd(&candidates[candidates_y_offset + candidates_x], (abs(sinf(phase*2)*abs(sinf(phase*2)))));
+      atomicAdd(&candidates[candidates_y_offset+100*cols + candidates_x], (abs(sinf(phase*2)*abs(sinf(phase*2)))));
+    
     
   }
-
+  
 }
 }
