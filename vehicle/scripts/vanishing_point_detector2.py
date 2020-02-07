@@ -154,7 +154,8 @@ def get_vanishing_point_callback(color_image_msg,
 				- int(GABOR_FILTER_KERNEL_SIZE / 2):, :]
     grey_image = cv2.resize(grey_image, (0,0),fx = SHRINK_FACTOR, fy = SHRINK_FACTOR)
     #grey_image = cv2.resize(grey_image, (0,0),fx = 1/SHRINK_FACTOR, fy = 1/SHRINK_FACTOR)
-    #grey_image = cv2.GaussianBlur( grey_image, (9, 9), 0)
+    grey_image2 = cv2.GaussianBlur( grey_image, (3, 3), 0)
+    grey_image = grey_image + cv2.GaussianBlur(grey_image, (5, 5), 0) -grey_image2;
     cuda_context.push()
     
     original_rows, original_cols = grey_image.shape
@@ -217,7 +218,7 @@ def get_vanishing_point_callback(color_image_msg,
 
    
     
-    vp_com = int(m["m10"]/m["m00"])
+    vp_col = int(m["m10"]/m["m00"])
     
     """
     #max
