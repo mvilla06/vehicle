@@ -131,6 +131,8 @@ target_link_libraries(sensors_sim ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
 add_executable(arrow_drawer src/arrows.cpp)
 target_link_libraries(arrow_drawer ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
 
+add_executable(road_delimiter src/road_delimiter.cpp)
+target_link_libraries(road_delimiter ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
 
 #############
 ## Install ##

@@ -24,8 +24,8 @@
         <param name="publish_combined_gabor_energies" type="bool" value="True"/>
         <param name="publish_vp_candidates_voting_region" type="bool" value="True"/>
     </node>
-    <node pkg="vehicle" type="arrow_drawer" name="ArrowDisplay"/>
-
+    <node pkg="vehicle" type="arrow_drawer" name="arrow_display_node" ns="arrow_display" cwd = "node" respawn = "true" output = "log"/>
+     <!-- <node pkg="vehicle" type="road_delimiter" name="road_delimiter_node" ns="road_delimiter" cwd = "node" respawn = "true" output = "log" />-->
   <!-- <node pkg="vehicle" type="cocoDetection.py" name="cocoDetection_node"
         cwd="node" respawn="true"/> -->
 
