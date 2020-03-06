@@ -179,7 +179,7 @@ def get_vanishing_point_callback(color_image_msg,
     )
     combineGaborEnergies(
         energies_gpu, np.int32(energies_rows), np.int32(energies_cols),
-        combined_energies_gpu, combined_phases_gpu, confidence_gpu,
+        combined_energies_gpu, combined_phases_gpu,  confidence_gpu,
         block=(CUDA_BLOCK_SIZE, CUDA_BLOCK_SIZE, 1),
         grid=(int(np.ceil(energies_cols / CUDA_BLOCK_SIZE)),
               int(np.ceil(energies_rows / CUDA_BLOCK_SIZE))))
@@ -190,9 +190,7 @@ def get_vanishing_point_callback(color_image_msg,
     vp_candidates_gpu = cuda.mem_alloc(np.float32().itemsize *
                                       (2 * VP_HORIZON_CANDIDATES_MARGIN + 1) *
                                        energies_cols)
-    cuda.memcpy_htod(  
-        vp_candidates_gpu,
-        np.zeros((2 * VP_HORIZON_CANDIDATES_MARGIN + 1 , energies_cols), dtype=np.float32))
+    cuda.memcpy_htod(vp_candidates_gpu, np.zeros((2 * VP_HORIZON_CANDIDATES_MARGIN + 1 , energies_cols), dtype=np.float32))
 
     
     voteForVanishingPointCandidates(
@@ -239,12 +237,31 @@ def get_vanishing_point_callback(color_image_msg,
     
     #if (abs(vp_col-vp_com)>100):
 	#vp_col = vp_com;
+    max_rows = (color_image.shape[0])*SHRINK_FACTOR
     
-    vp_row = int(vdisp_line.b)
+    vp_row = (max_rows-(2*VP_HORIZON_CANDIDATES_MARGIN-vp[0][0]+GABOR_FILTER_KERNEL_SIZE))#int(vdisp_line.b)
     
     vanishing_point_pub.publish(  # TODO: Publish real VP
-        VanishingPoint(header=color_image_msg.header, row=vp_row, col=vp_col*1/SHRINK_FACTOR))
+        VanishingPoint(header=color_image_msg.header, row=vp_row/SHRINK_FACTOR, col=(vp_col)*1/SHRINK_FACTOR))
 
+    direction_vector_gpu = cuda.mem_alloc(np.float32().itemsize*180)
+    direction_vector = np.zeros(180, dtype = np.float32);
+    cuda.memcpy_htod(direction_vector_gpu, direction_vector)
+    getRoadEdges(combined_energies_gpu,
+     combined_phases_gpu, np.int32(energies_rows), np.int32(energies_cols), np.int32(vp[0][0]+energies_rows-(vp_candidates.shape[0])), np.int32(vp_col), direction_vector_gpu,
+        block=(CUDA_BLOCK_SIZE, CUDA_BLOCK_SIZE, 1),
+        grid=(int(np.ceil(energies_cols / CUDA_BLOCK_SIZE)),
+              int(np.ceil(energies_rows / CUDA_BLOCK_SIZE))))
+
+
+    cuda.memcpy_dtoh(direction_vector, direction_vector_gpu)
+    direction_vector -= direction_vector.min();
+    direction_vector /= direction_vector.max();
+    direction_vector *= 255;
+    for i in range (0, 180):
+        cv2.line(color_image, (np.int32(vp_col/SHRINK_FACTOR), np.int32(vp_row/SHRINK_FACTOR)), (np.int32(vp_col/SHRINK_FACTOR-200*np.cos(i*np.pi/180)), np.int32(vp_row/SHRINK_FACTOR + 200*np.sin(i*np.pi/180))), (0, 0, int(direction_vector[i])), 2)
+    cv2.imshow("image",color_image)
+    cv2.waitKey(3);
     
 
     if gabor_filter_kernels_pubs is not None:
@@ -329,12 +346,12 @@ def get_vanishing_point_callback(color_image_msg,
         #                ((diff >> 1) + (original_cols >> 1), b),
         #                (0, 0, 255),
         #                thickness=3)
-	
+	"""
         confidence -= confidence.min()
         confidence /= confidence.max()
         confidence[confidence<0.8] = 0;
         confidence[confidence>0.8] = 1
-        confidence *= 255
+        confidence *= 255"""
         
         vp_candidates_region_pub.publish(cv_bridge.cv2_to_imgmsg(
             #grey_image, 
@@ -394,6 +411,7 @@ if __name__ == '__main__':
     divideGaborEnergiesTensor = mod.get_function('divideGaborEnergiesTensor')
     combineGaborEnergies = mod.get_function('combineGaborEnergies')
     voteForVanishingPointCandidates = mod.get_function('voteForVanishingPointCandidates')
+    getRoadEdges = mod.get_function('getRoadEdges')
 
     cv_bridge = CvBridge()
     vanishing_point_pub = rospy.Publisher(

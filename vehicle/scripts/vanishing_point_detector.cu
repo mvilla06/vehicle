@@ -201,11 +201,11 @@ __global__ void combineGaborEnergies(float* gabor_energies, int rows, int cols,
       }
       break;
   }
-  confidence[offset] = (1 - (
+  /*confidence[offset] = (1 - (
     (gabor_energies[THETA_N * offset + descending_energies_arg[1]] +
     gabor_energies[THETA_N * offset + descending_energies_arg[2]] +
     gabor_energies[THETA_N * offset + descending_energies_arg[3]] )
-    /(3*gabor_energies[THETA_N * offset + descending_energies_arg[0]])));
+    /(3*gabor_energies[THETA_N * offset + descending_energies_arg[0]])));*/
   combined_energies[offset] = sqrtf(combined_y * combined_y + combined_x * combined_x);
   combined_phases[offset] = atan2f(combined_y, combined_x);
   //printf("%f\n", combined_energies[offset]);
@@ -234,7 +234,7 @@ __global__ void voteForVanishingPointCandidates(float* combined_energies, float*
   int candidates_y_offset = (image_y+(candidates_rows-voters_rows));
   if(!candidates_y_offset) return;
   
-  float energy = combined_energies[energies_offset];
+  //float energy = combined_energies[energies_offset];
   /*if (energy < 0.085)
     return;  // Filter Noise*/
   
@@ -255,4 +255,42 @@ __global__ void voteForVanishingPointCandidates(float* combined_energies, float*
   }
   
 }
+
+
+
+/**
+  * Generates votes for the posible orientarions of the road's main edges by comparing the orientation of each pixel
+  * with the angle between itself and the vanishing point estimate. The pixel will emit a vote for the angle between
+  * the vanishing point estimate and itself; this vote is inversely proportional to the difference between its orientation
+  * and the angle with the vanishing point estimate. The two most voted orientations will correspond to the two edges
+  * of the road.
+  * @param combined_energies The resulting magnitude response from combining the Gabor energies at different thetas.
+  * @param combined_phases The resulting phase response from combining the Gabor energies at different thetas.
+  * @param rows The number of rows in 'gabor_energies'.
+  * @param cols The number of columns in 'gabor_energies'.
+  * @param vanishing_point_row The y coordinate of the vanishing point estimate.
+  * @param vanishing_point_col The x coordinate of the vanishing point estimate.
+  * @param direction_vector The vector of directions from the vanishing point estimate.
+  */
+
+  __global__ void getRoadEdges(const float * combined_energies,
+    const  float * combined_phases, int rows, int cols, int vanishing_point_row, int vanishing_point_col, float * direction_vector)
+  {
+    int image_x = blockDim.x * blockIdx.x + threadIdx.x;
+    int image_y = blockDim.y * blockIdx.y + threadIdx.y;
+    int offset = image_y * cols + image_x;
+    if (image_y >= rows || image_x >= cols)
+      return;  // Out of image.
+    if(combined_energies[offset]==0)
+      return;
+    float alpha;
+    float x = (image_x-vanishing_point_col);
+    float y = (image_y-vanishing_point_row);
+    if(x!=0)
+    alpha = atanf(y/x);
+    else alpha = PI/2;
+    if (alpha<0) alpha +=PI;
+    float arg = exp2f(-abs(alpha-combined_phases[offset]));
+    atomicAdd(&direction_vector[(int)(alpha*180/PI)], arg);
+  }
 }
