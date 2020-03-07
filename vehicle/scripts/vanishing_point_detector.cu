@@ -284,13 +284,14 @@ __global__ void voteForVanishingPointCandidates(float* combined_energies, float*
     if(combined_energies[offset]==0)
       return;
     float alpha;
-    float x = (image_x-vanishing_point_col);
+    float x = (-image_x+vanishing_point_col);
     float y = (image_y-vanishing_point_row);
+    float arg;
     if(x!=0)
     alpha = atanf(y/x);
     else alpha = PI/2;
-    if (alpha<0) alpha +=PI;
-    float arg = exp2f(-abs(alpha-combined_phases[offset]));
-    atomicAdd(&direction_vector[(int)(alpha*180/PI)], arg);
+    if (alpha<0) {alpha +=PI;} 
+    arg = exp2f(-abs(alpha-combined_phases[offset]));
+    atomicAdd(&direction_vector[(int)(lroundf(alpha*180.0/PI))], arg);
   }
 }

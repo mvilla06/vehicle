@@ -11,8 +11,10 @@ import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 import numpy as np
 import cv2
-from scipy import ndimage
-import matplotlib.pyplot as plt
+
+from matplotlib import pyplot as plt
+from rospy_tutorials.msg import Floats
+from rospy.numpy_msg import numpy_msg
 
 
 CUDA_VANISHING_POINT_DETECTOR_FILENAME = 'vanishing_point_detector.cu'
@@ -150,7 +152,6 @@ def get_vanishing_point_callback(color_image_msg,
     
     
     grey_image = grey_image[int(np.round(vdisp_line.b)) 
-			#	+ VP_HORIZON_CANDIDATES_MARGIN/2 
 				- int(GABOR_FILTER_KERNEL_SIZE / 2):, :]
     grey_image = cv2.resize(grey_image, (0,0),fx = SHRINK_FACTOR, fy = SHRINK_FACTOR)
     
@@ -213,30 +214,14 @@ def get_vanishing_point_callback(color_image_msg,
     vp_candidates *=255
     
     
-    """
-	#center of mass
-    m = cv2.moments(vp_candidates)
-    if m["m00"]==0:
-	m["m00"] = 1;
-	m["m10"] = original_cols>>1
-    
-    
    
-
-
-   
-    
-    vp_col = int(m["m10"]/m["m00"])
-    
-    """
     #max
     vp = np.where(vp_candidates == np.amax(vp_candidates));
-    #rospy.loginfo(vp)
+  
     
     vp_col = vp[1][0];
     
-    #if (abs(vp_col-vp_com)>100):
-	#vp_col = vp_com;
+    
     max_rows = (color_image.shape[0])*SHRINK_FACTOR
     
     vp_row = (max_rows-(2*VP_HORIZON_CANDIDATES_MARGIN-vp[0][0]+GABOR_FILTER_KERNEL_SIZE))#int(vdisp_line.b)
@@ -258,11 +243,24 @@ def get_vanishing_point_callback(color_image_msg,
     direction_vector -= direction_vector.min();
     direction_vector /= direction_vector.max();
     direction_vector *= 255;
+    hist = np.ones((300*2, 180*4), np.uint8)
+    hist *= 255;
     for i in range (0, 180):
+        for j in range (0, np.uint8(direction_vector[i])):
+            if i % 30 !=0:
+                hist[(299-j)*2][i*4] = 0;
+                hist[(299-j)*2][i*4+1] = 0;
+                hist[(299-j)*2][i*4+2] = 0;
+                hist[(299-j)*2][i*4+3] = 0;
         cv2.line(color_image, (np.int32(vp_col/SHRINK_FACTOR), np.int32(vp_row/SHRINK_FACTOR)), (np.int32(vp_col/SHRINK_FACTOR-200*np.cos(i*np.pi/180)), np.int32(vp_row/SHRINK_FACTOR + 200*np.sin(i*np.pi/180))), (0, 0, int(direction_vector[i])), 2)
     cv2.imshow("image",color_image)
     cv2.waitKey(3);
     
+    #cv2.imshow("hist", hist)
+    # plt.hist(direction_vector, 180);
+    # plt.title("Histogram");
+    # plt.draw();
+    # plt.pause(0.1)
 
     if gabor_filter_kernels_pubs is not None:
         for theta_idx in range(THETA_N):
@@ -306,15 +304,13 @@ def get_vanishing_point_callback(color_image_msg,
         combined_energies *= 255
 	
 	
-	#mask = (np.pad(combined_energies, ((12,12), (12, 12)), mode='constant', constant_values= ((1, 1), (1, 1)) )>0).astype(np.uint8)
-	#mask *=255
 	
-	#gray_image = cv2.bitwise_and(grey_image, grey_image, mask=mask)
-        
-        #rospy.loginfo(combined_energies);
         gabor_combined_energies_pub.publish(cv_bridge.cv2_to_imgmsg(
-            combined_energies.astype(np.uint8), encoding='8UC1'))
-	#gabor_combined_energies_pub.publish(cv_bridge.cv2_to_imgmsg(gray_image, encoding='8UC1'))
+            #combined_energies.astype(np.uint8)
+            hist
+            , encoding='8UC1'))
+            
+	
 
     if vp_candidates_region_pub is not None:
         vp_candidates_region = np.empty(
@@ -327,31 +323,8 @@ def get_vanishing_point_callback(color_image_msg,
         vp_candidates_region -= vp_candidates_region.min()
         vp_candidates_region /= vp_candidates_region.max()
         vp_candidates_region *= 255
-	#vp_candidates_region = 255-vp_candidates_region
-        #color_vp_candidates_region = cv2.cvtColor(
-        #    vp_candidates_region.astype(np.uint8), cv2.COLOR_GRAY2RGB)
-        #color_vp_candidates_region[max_idx[0] - 5:max_idx[0] + 5,
-        #    max_idx[1] - 10:max_idx[1] + 10, :] = np.array([0, 0, 255],
-        #                                                dtype=np.uint8)
-
-        #b = int(np.round(vdisp_line.b))
-        #color_image = color_image.copy()
-        #color_image[b - 5:b + 5, max_idx[1] - 5:max_idx[1] + 5, :] = (
-        #    np.array([0, 0, 255], dtype=np.uint8))  # Needs X adjustment
-        #diff = (
-        #    max_idx[1] + (GABOR_FILTER_KERNEL_SIZE >> 1) - (original_cols >> 1))
-        #if abs(diff) > 100: diff = 0
-        #cv2.arrowedLine(color_image,
-        #                (original_cols >> 1, 1000),
-        #                ((diff >> 1) + (original_cols >> 1), b),
-        #                (0, 0, 255),
-        #                thickness=3)
-	"""
-        confidence -= confidence.min()
-        confidence /= confidence.max()
-        confidence[confidence<0.8] = 0;
-        confidence[confidence>0.8] = 1
-        confidence *= 255"""
+	
+        vp_candidates_region[vp[0][0]][ vp[1][0]] = 0;
         
         vp_candidates_region_pub.publish(cv_bridge.cv2_to_imgmsg(
             #grey_image, 
@@ -359,6 +332,8 @@ def get_vanishing_point_callback(color_image_msg,
             
             #confidence.astype(np.uint8),
             encoding='8UC1'))
+
+    
 		   
 
 
@@ -366,7 +341,7 @@ if __name__ == '__main__':
     vpGraph=[];
     plt.ion();
     rospy.init_node('vanishing_point_detector', anonymous=False)
-
+    
     # The following publications are for debugging and visualization only as
     # they severely slow down node execution.
     PUBLISH_GABOR_FILTER_KERNELS = rospy.get_param(
@@ -414,6 +389,7 @@ if __name__ == '__main__':
     getRoadEdges = mod.get_function('getRoadEdges')
 
     cv_bridge = CvBridge()
+   
     vanishing_point_pub = rospy.Publisher(
         'vanishing_point', VanishingPoint, queue_size=1)
     gabor_filter_kernels_pubs = (
@@ -454,5 +430,6 @@ if __name__ == '__main__':
                         gabor_energies_pubs,
                         gabor_combined_energies_pub,
                         vp_candidates_region_pub)
-
+    plt.show(block=True)
     rospy.spin()
+    
