@@ -3,7 +3,7 @@
 
 
     <node pkg="rosbag" type="play" name="player" output="screen"
-          args="--clock /home/mauricio/Vehiculo/TEC_2019-04-03-17-35-59.bag"/>
+          args="--clock /home/mauricio/Vehiculo/TEC_2019-04-03-16-58-58.bag"/>
 
     <node pkg="rqt_gui" type="rqt_gui" name="rqt_gui_node"/>
 

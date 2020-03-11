@@ -273,8 +273,8 @@ __global__ void voteForVanishingPointCandidates(float* combined_energies, float*
   * @param direction_vector The vector of directions from the vanishing point estimate.
   */
 
-  __global__ void getRoadEdges(const float * combined_energies,
-    const  float * combined_phases, int rows, int cols, int vanishing_point_row, int vanishing_point_col, float * direction_vector)
+  __global__ void getRoadEdges(const float * combined_energies, const  float * combined_phases, int rows, int cols, 
+                                int vanishing_point_row, int vanishing_point_col, float * direction_vector)
   {
     int image_x = blockDim.x * blockIdx.x + threadIdx.x;
     int image_y = blockDim.y * blockIdx.y + threadIdx.y;
@@ -293,5 +293,13 @@ __global__ void voteForVanishingPointCandidates(float* combined_energies, float*
     if (alpha<0) {alpha +=PI;} 
     arg = exp2f(-abs(alpha-combined_phases[offset]));
     atomicAdd(&direction_vector[(int)(lroundf(alpha*180.0/PI))], arg);
+    
+
+  }
+
+  __global__ void update_vanishing_point( float * vanishing_point_candidates, int candidates_rows, int candidates_cols, int max_direction,
+                                          int vp_row, int vp_col, int * updated_vp)
+  {
+
   }
 }
