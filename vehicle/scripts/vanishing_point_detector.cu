@@ -2,6 +2,7 @@
 #define SQRT_2 1.4142135623730951f
 #define PI 3.141592653589793f
 
+
 extern "C" {
 /**
  * Clears out the Gabor Energies Tensor, setting all of its values to zero.
@@ -273,8 +274,8 @@ __global__ void voteForVanishingPointCandidates(float* combined_energies, float*
   * @param direction_vector The vector of directions from the vanishing point estimate.
   */
 
-  __global__ void getRoadEdges(const float * combined_energies, const  float * combined_phases, int rows, int cols, 
-                                int vanishing_point_row, int vanishing_point_col, float * direction_vector)
+  __global__ void getRoadEdges(int candidate_number, const float * combined_energies, const  float * combined_phases, int rows, int cols, 
+                                int * vanishing_point_candidates, float * direction_vector, float * vp_score)
   {
     int image_x = blockDim.x * blockIdx.x + threadIdx.x;
     int image_y = blockDim.y * blockIdx.y + threadIdx.y;
@@ -283,23 +284,54 @@ __global__ void voteForVanishingPointCandidates(float* combined_energies, float*
       return;  // Out of image.
     if(combined_energies[offset]==0)
       return;
-    float alpha;
-    float x = (-image_x+vanishing_point_col);
-    float y = (image_y-vanishing_point_row);
-    float arg;
-    if(x!=0)
-    alpha = atanf(y/x);
-    else alpha = PI/2;
-    if (alpha<0) {alpha +=PI;} 
-    arg = exp2f(-abs(alpha-combined_phases[offset]));
-    atomicAdd(&direction_vector[(int)(lroundf(alpha*180.0/PI))], arg);
+    
+    float alpha;float arg;
+    for(int i=0; i<candidate_number; i++){
+        int x = (-image_x+vanishing_point_candidates[i*2+1]); //col
+        int y = (image_y-vanishing_point_candidates[i*2]); //row
+        
+        if(x!=0)
+        alpha = atanf((float)y/(float)x);
+        else alpha = PI/2;
+        if (alpha<0) alpha +=PI;
+        arg = exp2f(-abs(alpha-combined_phases[offset])*PI);
+
+        atomicAdd(&direction_vector[(int)(lroundf(alpha*179.0/PI)) + 180*i], arg);
+        atomicAdd(&vp_score[i], arg);
+    }
+    
     
 
   }
 
-  __global__ void update_vanishing_point( float * vanishing_point_candidates, int candidates_rows, int candidates_cols, int max_direction,
-                                          int vp_row, int vp_col, int * updated_vp)
-  {
 
+  __global__ void getSupportingPixels(int row, int col, float * combined_phases, float* combined_energies, int rows, int cols, float * support_pixels){
+    int image_x = blockDim.x * blockIdx.x + threadIdx.x;
+    int image_y = blockDim.y * blockIdx.y + threadIdx.y;
+    int offset = image_y * cols + image_x;
+    if (image_y >= rows || image_x >= cols)
+      return;  // Out of image.
+    
+    if(combined_energies[offset]!=0){
+      float alpha;
+    int x = (-image_x+col); //col
+        int y = (image_y-row); //row
+        
+        if(x!=0)
+        alpha = atanf((float)y/(float)x);
+        else alpha = PI/2;
+        if (alpha<0) alpha +=PI;
+
+        /*if(abs(alpha-combined_phases[offset])<0.05){
+          support_pixels[offset] = 1;
+        }else
+        support_pixels [offset] = 0;*/
+        support_pixels[offset] = exp2f(-abs(alpha-combined_phases[offset])*PI);
+    }
+    else
+      support_pixels[offset] = 0;
+    
   }
+
+  
 }

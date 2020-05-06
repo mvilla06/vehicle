@@ -219,82 +219,116 @@ def get_vanishing_point_callback(color_image_msg,
     vp = np.where(vp_candidates == np.amax(vp_candidates));
   
     
-    vp_col = vp[1][0];
+    vp_col = vp[1][0] ;
     
     
     max_rows = (color_image.shape[0])*SHRINK_FACTOR
     
     #vp_row = int(np.round(vdisp_line.b))*SHRINK_FACTOR
-    vp_row = (max_rows-(2*VP_HORIZON_CANDIDATES_MARGIN-vp[0][0]+GABOR_FILTER_KERNEL_SIZE))
-    vp_score = [0, 0];
+    #vp_row = (max_rows-(2*VP_HORIZON_CANDIDATES_MARGIN-vp[0][0]+GABOR_FILTER_KERNEL_SIZE/2))
+    vp_row = 2*VP_HORIZON_CANDIDATES_MARGIN +1 - vp[0][0];
+    #vp_score = [0, 0];
+    
+    VP_CANDIDATE_NUMBER = 7**2
+
+    direction_array_gpu = cuda.mem_alloc(np.float32().itemsize*180*VP_CANDIDATE_NUMBER)
+    candidates_array_gpu = cuda.mem_alloc(np.int32().itemsize*VP_CANDIDATE_NUMBER*2)
+    vp_score_gpu = cuda.mem_alloc(np.int32().itemsize*VP_CANDIDATE_NUMBER);
+    
+    
+    direction_array = np.zeros((VP_CANDIDATE_NUMBER, 180), dtype = np.float32);
+    candidates_array = np.zeros((VP_CANDIDATE_NUMBER, 2), dtype = np.int32)
+    vp_score = np.zeros(VP_CANDIDATE_NUMBER, dtype = np.float32)
+
+    
+    for i in range (VP_CANDIDATE_NUMBER):
+        candidates_array[i][0] = energies_rows- vp_row +(i % np.int32(np.sqrt(VP_CANDIDATE_NUMBER)))*5-np.int32(np.sqrt(VP_CANDIDATE_NUMBER))*2 #+energies_rows-max_rows+GABOR_FILTER_KERNEL_SIZE/2
+        candidates_array[i][1] = vp_col - (i / np.int32(np.sqrt(VP_CANDIDATE_NUMBER)))*5+np.int32(np.sqrt(VP_CANDIDATE_NUMBER))*2
+    
+    
+    row = vp_row -max_rows+GABOR_FILTER_KERNEL_SIZE/2 +energies_rows;
+
+       
+
+
+    cuda.memcpy_htod(direction_array_gpu, direction_array)
+    cuda.memcpy_htod(candidates_array_gpu, candidates_array)
+    cuda.memcpy_htod(vp_score_gpu, vp_score)
+    
+    getRoadEdges(np.int32(VP_CANDIDATE_NUMBER), combined_energies_gpu,
+     combined_phases_gpu, np.int32(energies_rows), np.int32(energies_cols), candidates_array_gpu, direction_array_gpu, vp_score_gpu,
+   
+        block=(CUDA_BLOCK_SIZE, CUDA_BLOCK_SIZE, 1),
+        grid=(int(np.ceil(energies_cols / CUDA_BLOCK_SIZE)),
+              int(np.ceil(energies_rows / CUDA_BLOCK_SIZE))))
+
+
+    
+
+    cuda.memcpy_dtoh(direction_array, direction_array_gpu)
+    
+   
+    cuda.memcpy_dtoh(vp_score, vp_score_gpu)
+    
+
+    
+    vp_score -=vp_score.min()
+    vp_score /=vp_score.max()
+    vp_score *= 255;
+
+    
+    vp_max = np.where(vp_score ==np.max(vp_score))[0]
+    
+    
+    vp_row = candidates_array[vp_max[0]][0]-energies_rows+max_rows-GABOR_FILTER_KERNEL_SIZE
+    vp_col = candidates_array[vp_max[0]][1]
+    
+    row = candidates_array[vp_max[0]][0]
+
+    supporting_pixels_gpu = cuda.mem_alloc(np.float32().itemsize*energies_rows*energies_cols)
+
+    getSupportingPixels(np.int32(row), np.int32(vp_col), combined_phases_gpu, combined_energies_gpu, np.int32(energies_rows), np.int32(energies_cols), supporting_pixels_gpu,
+    block=(CUDA_BLOCK_SIZE, CUDA_BLOCK_SIZE, 1),
+        grid=(int(np.ceil(energies_cols / CUDA_BLOCK_SIZE)),
+              int(np.ceil(energies_rows / CUDA_BLOCK_SIZE)))
+    
+    )
+
+    supporting_pixels = np.empty((energies_rows, energies_cols), dtype=np.float32)
+    cuda.memcpy_dtoh(supporting_pixels, supporting_pixels_gpu)
+
+    supporting_pixels-=np.min(supporting_pixels)
+    supporting_pixels/=np.max(supporting_pixels)
+    supporting_pixels*=255;
+
+
+
+   
+
+    #rospy.loginfo(candidates_array[vp_max[0]])
     
     vanishing_point_pub.publish(  # TODO: Publish real VP
-        VanishingPoint(header=color_image_msg.header, row=vp_row/SHRINK_FACTOR, col=(vp_col)*1/SHRINK_FACTOR))
+        VanishingPoint(header=color_image_msg.header, row=vp_row/SHRINK_FACTOR, col=(vp_col+GABOR_FILTER_KERNEL_SIZE/2)*1/SHRINK_FACTOR))
 
-    direction_vector_gpu = cuda.mem_alloc(np.float32().itemsize*180)
     
-     
-    direction_vector = np.zeros(180, dtype = np.float32);
-    cuda.memcpy_htod(direction_vector_gpu, direction_vector)
     
-    getRoadEdges(combined_energies_gpu,
-     combined_phases_gpu, np.int32(energies_rows), np.int32(energies_cols), np.int32(vp[0][0]+energies_rows-(vp_candidates.shape[0])), np.int32(vp_col), direction_vector_gpu,
-   
-        block=(CUDA_BLOCK_SIZE, CUDA_BLOCK_SIZE, 1),
-        grid=(int(np.ceil(energies_cols / CUDA_BLOCK_SIZE)),
-              int(np.ceil(energies_rows / CUDA_BLOCK_SIZE))))
-
-
-    #update_vanishing_point(vp_candidates_gpu, np.int32(2 * VP_HORIZON_CANDIDATES_MARGIN + 1), np.int32(energies_cols), )
-
-    cuda.memcpy_dtoh(direction_vector, direction_vector_gpu)
-    
-    sorted_directions = np.sort(direction_vector)
-    
-    for i in range (1, 10):
-        vp_score[0]+=sorted_directions[180-i];
-
-
-
-    vp_row = int(np.round(vdisp_line.b))*SHRINK_FACTOR
-
-    direction_vector_gpu2 = cuda.mem_alloc(np.float32().itemsize*180)
-    
-     
-    direction_vector2 = np.zeros(180, dtype = np.float32);
-    cuda.memcpy_htod(direction_vector_gpu2, direction_vector2)
-    
-    getRoadEdges(combined_energies_gpu,
-     combined_phases_gpu, np.int32(energies_rows), np.int32(energies_cols), np.int32(vdisp_line.b*SHRINK_FACTOR+energies_rows-(vp_candidates.shape[0])), np.int32(vp_col), direction_vector_gpu2,
-   
-        block=(CUDA_BLOCK_SIZE, CUDA_BLOCK_SIZE, 1),
-        grid=(int(np.ceil(energies_cols / CUDA_BLOCK_SIZE)),
-              int(np.ceil(energies_rows / CUDA_BLOCK_SIZE))))
-
-
-    #update_vanishing_point(vp_candidates_gpu, np.int32(2 * VP_HORIZON_CANDIDATES_MARGIN + 1), np.int32(energies_cols), )
-
-    cuda.memcpy_dtoh(direction_vector2, direction_vector_gpu2)
-    
-    sorted_directions2 = np.sort(direction_vector2)
-    
-    for i in range (1, 10):
-        vp_score[1]+=sorted_directions2[180-i];
-
-
-
-    rospy.loginfo(vp_score)
+    direction_vector = direction_array[vp_max[0]]
     
     direction_vector -= direction_vector.min();
     direction_vector /= direction_vector.max();
     direction_vector *= 255;
+
     hist = np.ones((300*2, 180*4), np.uint8)
     hist *= 255;
     max_left =0;
     max_right = 0;
     index_right = 0;
     index_left = 0;
+    vp_score = np.int32(vp_score)
+    
+    
     for i in range (0, 180):
+        
         for j in range (0, np.uint8(direction_vector[i])):
             if i % 30 !=0:
                 hist[(299-j)*2][i*4] = 0;
@@ -302,6 +336,8 @@ def get_vanishing_point_callback(color_image_msg,
                 hist[(299-j)*2][i*4+2] = 0;
                 hist[(299-j)*2][i*4+3] = 0;
         
+    
+
     for i in range (0, 90):
         if direction_vector[i]>max_left:
             max_left = direction_vector[i]
@@ -310,24 +346,21 @@ def get_vanishing_point_callback(color_image_msg,
             max_right = direction_vector[179-i];
             index_right = 179-i
     
-    if max_left>max_right or max_right>max_left:
-        cv2.line(color_image, (np.int32(vp_col/SHRINK_FACTOR), np.int32(vp_row/SHRINK_FACTOR)),
-            (np.int32(vp_col/SHRINK_FACTOR-200*np.cos(index_left*np.pi/180)),
-            np.int32(vp_row/SHRINK_FACTOR + 200*np.sin(index_left*np.pi/180))), 
-            (0, 255, 0), 2)
+    #if max_left>max_right or max_right>max_left:
+    
+    cv2.line(color_image, (np.int32(vp_col/SHRINK_FACTOR), np.int32((vp_row/SHRINK_FACTOR))),
+        (np.int32(vp_col/SHRINK_FACTOR-600*np.cos(index_left*np.pi/180)),
+        np.int32(vp_row/SHRINK_FACTOR + 600*np.sin(index_left*np.pi/180))), 
+        (0, 255, 0), 5)
     #else:
-        cv2.line(color_image, (np.int32(vp_col/SHRINK_FACTOR), np.int32(vp_row/SHRINK_FACTOR)),
-            (np.int32(vp_col/SHRINK_FACTOR-200*np.cos(index_right*np.pi/180)),
-            np.int32(vp_row/SHRINK_FACTOR + 200*np.sin(index_right*np.pi/180))), 
-            (0, 255, 0), 2)
+    cv2.line(color_image, (np.int32(vp_col/SHRINK_FACTOR), np.int32(vp_row/SHRINK_FACTOR)),
+            (np.int32(vp_col/SHRINK_FACTOR-600*np.cos(index_right*np.pi/180)),
+            np.int32(vp_row/SHRINK_FACTOR + 600*np.sin(index_right*np.pi/180))), 
+            (0, 255, 0), 5)
     cv2.imshow("image",color_image)
     cv2.waitKey(3);
     
-    #cv2.imshow("hist", hist)
-    # plt.hist(direction_vector, 180);
-    # plt.title("Histogram");
-    # plt.draw();
-    # plt.pause(0.1)
+    
 
     if gabor_filter_kernels_pubs is not None:
         for theta_idx in range(THETA_N):
@@ -374,7 +407,8 @@ def get_vanishing_point_callback(color_image_msg,
 	
         gabor_combined_energies_pub.publish(cv_bridge.cv2_to_imgmsg(
             #combined_energies.astype(np.uint8)
-            hist
+            #hist
+            supporting_pixels.astype(np.uint8)
             , encoding='8UC1'))
             
 	
@@ -454,7 +488,7 @@ if __name__ == '__main__':
     combineGaborEnergies = mod.get_function('combineGaborEnergies')
     voteForVanishingPointCandidates = mod.get_function('voteForVanishingPointCandidates')
     getRoadEdges = mod.get_function('getRoadEdges')
-    update_vanishing_point = mod.get_function('update_vanishing_point')
+    getSupportingPixels = mod.get_function('getSupportingPixels')
 
     cv_bridge = CvBridge()
    

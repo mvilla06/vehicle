@@ -3,7 +3,7 @@
 
 
     <node pkg="rosbag" type="play" name="player" output="screen"
-          args="--clock /home/mauricio/Vehiculo/TEC_2019-04-03-16-58-58.bag"/>
+          args="--clock /home/mauricio/Vehiculo/TEC_2019-04-03-17-35-59.bag"/>
 
     <node pkg="rqt_gui" type="rqt_gui" name="rqt_gui_node"/>
 
@@ -26,7 +26,7 @@
     </node>
     <node pkg="vehicle" type="arrow_drawer" name="arrow_display_node" ns="arrow_display" cwd = "node" respawn = "true" output = "log"/>
      <!-- <node pkg="vehicle" type="road_delimiter" name="road_delimiter_node" ns="road_delimiter" cwd = "node" respawn = "true" output = "log" />-->
-  <!-- <node pkg="vehicle" type="cocoDetection.py" name="cocoDetection_node"
+   <!-- <node pkg="vehicle" type="cocoDetection.py" name="cocoDetection_node"
         cwd="node" respawn="true"/> -->
 
   <!-- map has to be in the TF tree: it's broadcasted by sensor_sim -->
