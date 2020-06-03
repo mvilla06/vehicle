@@ -322,10 +322,10 @@ __global__ void voteForVanishingPointCandidates(float* combined_energies, float*
         else alpha = PI/2;
         if (alpha<0) alpha +=PI;
 
-        /*if(abs(alpha-combined_phases[offset])<0.05){
-          support_pixels[offset] = 1;
+        if(abs(alpha-combined_phases[offset])<0.1){
+          support_pixels[offset] = 255;
         }else
-        support_pixels [offset] = 0;*/
+        support_pixels [offset] = 0;
         support_pixels[offset] = exp2f(-abs(alpha-combined_phases[offset])*PI);
     }
     else

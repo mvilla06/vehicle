@@ -4,15 +4,15 @@
 
     <node pkg="rosbag" type="play" name="player" output="screen"
           args="--clock /home/mauricio/Vehiculo/TEC_2019-04-03-17-35-59.bag"/>
-
+      <!-- 16-58-58; 17-35-59 17-05-14-->
     <node pkg="rqt_gui" type="rqt_gui" name="rqt_gui_node"/>
 
     <node pkg="vehicle" type="vdisp_line_fitter.py" name="vdisp_line_fitter_node"
         ns="vdisp_line_fitter" cwd="node" respawn="true" output="log">
         <param name="use_deprecated_code" type="bool" value="False"/>
         <param name="publish_udisp_threshold_filter" type="bool" value="False"/>
-        <param name="publish_vdisp_with_fitted_line" type="bool" value="False"/>
-        <param name="publish_vdisp_line_fitted_road" type="bool" value="False"/>
+        <param name="publish_vdisp_with_fitted_line" type="bool" value="True"/>
+        <param name="publish_vdisp_line_fitted_road" type="bool" value="True"/>
         <param name="publish_cloud_coloring" type="bool" value="False"/>
     </node> 
 
@@ -20,14 +20,14 @@
           name="vanishing_point_detector_node" ns="vanishing_point_detector"
           cwd="node" respawn="true" output="screen">
         <param name="publish_gabor_filter_kernels" type="bool" value="False"/>
-        <param name="publish_gabor_energies" type="bool" value="False"/>
+        <param name="publish_gabor_energies" type="bool" value="True"/>
         <param name="publish_combined_gabor_energies" type="bool" value="True"/>
         <param name="publish_vp_candidates_voting_region" type="bool" value="True"/>
     </node>
     <node pkg="vehicle" type="arrow_drawer" name="arrow_display_node" ns="arrow_display" cwd = "node" respawn = "true" output = "log"/>
      <!-- <node pkg="vehicle" type="road_delimiter" name="road_delimiter_node" ns="road_delimiter" cwd = "node" respawn = "true" output = "log" />-->
-   <!-- <node pkg="vehicle" type="cocoDetection.py" name="cocoDetection_node"
-        cwd="node" respawn="true"/> -->
+    <node pkg="vehicle" type="cocoDetection.py" name="cocoDetection_node"
+        cwd="node" respawn="true"/> 
 
   <!-- map has to be in the TF tree: it's broadcasted by sensor_sim -->
   <!-- <node pkg="swri_transform_util" type="initialize_origin.py" name="initialize_origin">

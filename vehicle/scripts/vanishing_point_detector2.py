@@ -16,6 +16,10 @@ from matplotlib import pyplot as plt
 from rospy_tutorials.msg import Floats
 from rospy.numpy_msg import numpy_msg
 
+last_right = list([0, 0]);
+last_left = list([0, 0]);
+
+
 
 CUDA_VANISHING_POINT_DETECTOR_FILENAME = 'vanishing_point_detector.cu'
 
@@ -171,8 +175,10 @@ def get_vanishing_point_callback(color_image_msg,
 
     energies_gpu = apply_gabor_kernels(grey_image, gabor_kernels_gpu)
 
+
+    
     combined_energies_gpu = cuda.mem_alloc(
-        np.float32().itemsize * energies_rows * energies_cols)
+        np.float32().itemsize * energies_rows * energies_cols) 
     combined_phases_gpu = cuda.mem_alloc(
         np.float32().itemsize * energies_rows * energies_cols)
     confidence_gpu = cuda.mem_alloc(
@@ -188,10 +194,19 @@ def get_vanishing_point_callback(color_image_msg,
     confidence = np.empty((energies_rows, energies_cols), dtype = np.float32)
     cuda.memcpy_dtoh(confidence, confidence_gpu)
 
+
+    phases = np.empty((energies_rows, energies_cols),
+                                     dtype=np.float32)
+    cuda.memcpy_dtoh(phases, combined_phases_gpu);
+    
+    #for x in range(100, 1000, 50):
+    #    for y in range(350, 500, 50):
+    
     vp_candidates_gpu = cuda.mem_alloc(np.float32().itemsize *
                                       (2 * VP_HORIZON_CANDIDATES_MARGIN + 1) *
                                        energies_cols)
     cuda.memcpy_htod(vp_candidates_gpu, np.zeros((2 * VP_HORIZON_CANDIDATES_MARGIN + 1 , energies_cols), dtype=np.float32))
+
 
     
     voteForVanishingPointCandidates(
@@ -281,7 +296,7 @@ def get_vanishing_point_callback(color_image_msg,
     
     
     vp_row = candidates_array[vp_max[0]][0]-energies_rows+max_rows-GABOR_FILTER_KERNEL_SIZE
-    vp_col = candidates_array[vp_max[0]][1]
+    vp_col = candidates_array[vp_max[0]][1] +GABOR_FILTER_KERNEL_SIZE/2
     
     row = candidates_array[vp_max[0]][0]
 
@@ -294,23 +309,15 @@ def get_vanishing_point_callback(color_image_msg,
     
     )
 
-    supporting_pixels = np.empty((energies_rows, energies_cols), dtype=np.float32)
+    supporting_pixels = np.zeros((energies_rows, energies_cols), dtype=np.float32)
     cuda.memcpy_dtoh(supporting_pixels, supporting_pixels_gpu)
 
-    supporting_pixels-=np.min(supporting_pixels)
-    supporting_pixels/=np.max(supporting_pixels)
-    supporting_pixels*=255;
-
-
-
-   
-
-    #rospy.loginfo(candidates_array[vp_max[0]])
-    
     vanishing_point_pub.publish(  # TODO: Publish real VP
-        VanishingPoint(header=color_image_msg.header, row=vp_row/SHRINK_FACTOR, col=(vp_col+GABOR_FILTER_KERNEL_SIZE/2)*1/SHRINK_FACTOR))
+        VanishingPoint(header=color_image_msg.header, row=vp_row/SHRINK_FACTOR, col=(vp_col)*1/SHRINK_FACTOR))
 
-    
+    supporting_pixels -= supporting_pixels.min();
+    supporting_pixels /= supporting_pixels.max();
+    supporting_pixels *= 255;
     
     direction_vector = direction_array[vp_max[0]]
     
@@ -325,6 +332,8 @@ def get_vanishing_point_callback(color_image_msg,
     index_right = 0;
     index_left = 0;
     vp_score = np.int32(vp_score)
+    global last_left;
+    global last_right;
     
     
     for i in range (0, 180):
@@ -340,19 +349,49 @@ def get_vanishing_point_callback(color_image_msg,
 
     for i in range (0, 90):
         if direction_vector[i]>max_left:
-            max_left = direction_vector[i]
+            
             index_left = i
+            max_left = direction_vector[index_left]
+            
         if direction_vector[179-i]>max_right:
-            max_right = direction_vector[179-i];
+            
             index_right = 179-i
+            max_right = direction_vector[index_right];
+            
     
-    #if max_left>max_right or max_right>max_left:
+  
+    x = 750
+    y = 450
+    #cv2.line(color_image, (x, y), (np.int(vp_col/SHRINK_FACTOR), np.int(vp_row/SHRINK_FACTOR)), (0, 0, 255), 2)   
+    #cv2.arrowedLine(color_image, (x, y), (np.int32(x+20*np.cos(phases[np.int((y-544)*SHRINK_FACTOR+102+GABOR_FILTER_KERNEL_SIZE/2)][np.int(x*SHRINK_FACTOR-GABOR_FILTER_KERNEL_SIZE/2)])),
+                      #                          np.int32(y-20*np.sin(phases[np.int((y-544)*SHRINK_FACTOR+102+GABOR_FILTER_KERNEL_SIZE/2)][np.int(x*SHRINK_FACTOR-GABOR_FILTER_KERNEL_SIZE/2)]) )), (255, 0, 0), 2)
     
+    
+    
+
+    index_left = (last_left[0]+last_left[1]+index_left)/3;
+    last_left[0] = last_left[1]
+    last_left[1] = index_left;
+
+   
+    
+    index_right = (last_right[0]+last_right[1]+index_right)/3;
+    last_right[0] = last_right[1]
+    last_right[1] = index_right;
+
+    """
+    for i in range(180):
+        cv2.line(color_image, (np.int32(vp_col/SHRINK_FACTOR), np.int32((vp_row/SHRINK_FACTOR))),
+        (np.int32(vp_col/SHRINK_FACTOR-200*np.cos(i*np.pi/180)),
+        np.int32(vp_row/SHRINK_FACTOR + 200*np.sin(i*np.pi/180))), 
+        (np.int(direction_vector[i]), 0, 255-np.int(direction_vector[i])), 1)
+    """
+    #cv2.imshow("phases", color_image);
     cv2.line(color_image, (np.int32(vp_col/SHRINK_FACTOR), np.int32((vp_row/SHRINK_FACTOR))),
         (np.int32(vp_col/SHRINK_FACTOR-600*np.cos(index_left*np.pi/180)),
         np.int32(vp_row/SHRINK_FACTOR + 600*np.sin(index_left*np.pi/180))), 
         (0, 255, 0), 5)
-    #else:
+    
     cv2.line(color_image, (np.int32(vp_col/SHRINK_FACTOR), np.int32(vp_row/SHRINK_FACTOR)),
             (np.int32(vp_col/SHRINK_FACTOR-600*np.cos(index_right*np.pi/180)),
             np.int32(vp_row/SHRINK_FACTOR + 600*np.sin(index_right*np.pi/180))), 
@@ -491,6 +530,7 @@ if __name__ == '__main__':
     getSupportingPixels = mod.get_function('getSupportingPixels')
 
     cv_bridge = CvBridge()
+   
    
     vanishing_point_pub = rospy.Publisher(
         'vanishing_point', VanishingPoint, queue_size=1)

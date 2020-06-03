@@ -8,6 +8,7 @@ from utils import label_map_util
 import tensorflow as tf
 import numpy as np
 import os
+import cv2
 
 # MODEL_NAME = 'ssd_mobilenet_v1_coco_11_06_2017'
 # MODEL_NAME = 'ssd_mobilenet_v1_coco_2018_01_28'
@@ -44,7 +45,7 @@ def cocoDetectionCallback(cameraImageMsg, args):
         use_normalized_coordinates=True,
         line_thickness=5,
         min_score_thresh=MIN_SCORE_THRESH)
-
+    
     cocoDetectionPub.publish(bridge.cv2_to_imgmsg(cameraImage, encoding='bgr8'))
 
 
@@ -55,8 +56,8 @@ def listener():
     # Load detection graph (into default graph)
     detectionGraph = tf.Graph()
     with detectionGraph.as_default():
-        odGraphDef = tf.GraphDef()
-        with tf.gfile.GFile(PATH_TO_CKPT, 'rb') as fid:
+        odGraphDef = tf.compat.v1.GraphDef()
+        with tf.compat.v1.gfile.GFile(PATH_TO_CKPT, 'rb') as fid:
             serializedGraph = fid.read()
             odGraphDef.ParseFromString(serializedGraph)
             tf.import_graph_def(odGraphDef, name='')
@@ -68,12 +69,12 @@ def listener():
     classIndexMapping = label_map_util.create_category_index(categories)
 
     # Initialize Session
-    sess = tf.Session(graph=detectionGraph)
+    sess = tf.compat.v1.Session(graph=detectionGraph)
 
     cocoDetectionPub = rospy.Publisher(
         '/camera/cocoDetection', Image, queue_size=1)
     rospy.Subscriber(
-        '/camera/image', Image, cocoDetectionCallback,
+        '/multisense/left/image_rect_color', Image, cocoDetectionCallback,
         (bridge, detectionGraph, sess, classIndexMapping, cocoDetectionPub))
 
     rospy.spin()
